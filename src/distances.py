@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from numba import njit
 
 def procrustes_alignment(X, Y, args={'scale': True, 'rotation': True, 'mean': True}):
     """
@@ -58,12 +57,37 @@ def procrustes_alignment(X, Y, args={'scale': True, 'rotation': True, 'mean': Tr
     dist = np.sum(np.linalg.norm(diff, axis=1))
     return dist
 
+def l2(X, Y, args={}):
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
 
 
-def quaternion_distance(X, Y, args):
+    # 1. Translation (centroid to origin)
+    if args.get('mean', True):
+        X_mean = X.mean(axis=0)
+        Y_mean = Y.mean(axis=0)
+        X0 = X - X_mean
+        Y0 = Y - Y_mean
+    else:
+        X0 = X.copy()
+        Y0 = Y.copy()
+
+    # 2. Scale
+    normX = np.linalg.norm(X0)
+    normY = np.linalg.norm(Y0)
+    if args.get('scale', True):
+        X0 = X0 / (normX + 1e-15)
+        Y0 = Y0 / (normY + 1e-15)
+
+    return np.linalg.norm(X0-Y0)
+
+
+def quaternion_distance(X, Y, args={}):
+    # Align base: align_base
     base_translation = X[0] - Y[0]
-    Y_translated = Y + base_translation
+    Y_translated = Y.copy() + base_translation
 
+    # Split into fingers: split_hand_into_fingers
     finger_indices = {
         'thumb': [0, 1, 2, 3, 4],
         'index': [0, 5, 6, 7, 8],
@@ -71,23 +95,26 @@ def quaternion_distance(X, Y, args):
         'ring': [0, 13, 14, 15, 16],
         'pinky': [0, 17, 18, 19, 20]
     }
+    chains_X = {finger: X[inds] for finger, inds in finger_indices.items()}
+    chains_Y = {finger: Y_translated[inds] for finger, inds in finger_indices.items()}
 
     total_distance = 0.0
     Y_visualization = np.zeros_like(Y)
     Y_visualization[0] = X[0]
 
     for finger, inds in finger_indices.items():
-        chain_X = X[inds]
-        chain_Y = Y_translated[inds]
+        chain_X = chains_X[finger]
+        chain_Y = chains_Y[finger]
 
+        # Compute link directions
         diff_X = np.diff(chain_X, axis=0)
         diff_Y = np.diff(chain_Y, axis=0)
 
-        norm_X = R.from_matrix(frames_X).as_quat()
-        norm_Y = R.from_matrix(frames_Y).as_quat()
+        norm_X = np.linalg.norm(diff_X, axis=1, keepdims=True)
+        norm_Y = np.linalg.norm(diff_Y, axis=1, keepdims=True)
 
-        dirs_X = diff_X / (norm_X + 1e-8)
-        dirs_Y = diff_Y / (norm_Y + 1e-8)
+        dirs_X = np.divide(diff_X, norm_X, out=np.zeros_like(diff_X), where=norm_X >= 1e-8)
+        dirs_Y = np.divide(diff_Y, norm_Y, out=np.zeros_like(diff_Y), where=norm_Y >= 1e-8)
 
         # Inlined compute_frames (dirs_X)
         ref = np.array([0.0, 1.0, 0.0])
@@ -108,26 +135,39 @@ def quaternion_distance(X, Y, args):
         y_Y = np.cross(dirs_Y, x_Y)
         frames_Y = np.stack([x_Y, y_Y, dirs_Y], axis=-1)
 
-        # Quaternion conversion and geodesic distance
-        quats_X = rotation_matrix_to_quaternion(frames_X)
-        quats_Y = rotation_matrix_to_quaternion(frames_Y)
+
+        # Convert to quaternions
+        quats_X = R.from_matrix(frames_X).as_quat()
+        quats_Y = R.from_matrix(frames_Y).as_quat()
         quats_X = np.roll(quats_X, shift=1, axis=1)
         quats_Y = np.roll(quats_Y, shift=1, axis=1)
         quats_X = np.vstack([quats_X, quats_X[-1]])
         quats_Y = np.vstack([quats_Y, quats_Y[-1]])
 
+        # Compute link lengths
         lengths = np.linalg.norm(diff_X, axis=1)
-        weights = lengths**2 if args.get("weight_squared", False) else lengths
-        weights = weights / (weights.sum() + 1e-8)
+        weights = lengths**2 if args.get('weight_squared', False) else lengths
+        weights /= (weights.sum() + 1e-8)
 
+        # Geodesic distance
         dots = np.abs(np.sum(quats_X[1:] * quats_Y[1:], axis=1))
         dots = np.clip(dots, 0, 1)
         angles = 2 * np.arccos(dots)
         distances = angles**2
 
-        lambda_factor = args.get("lambda_factor", 1.0)
+        lambda_factor = args.get('lambda_factor', 1.0)
         d = lambda_factor * np.dot(weights, distances)
         total_distance += d
 
-    return total_distance
+        # Rebuild visualization
+        if len(inds) > 1:
+            current_point = X[0]
+            Y_visualization[inds[0]] = current_point
+            for i in range(1, len(inds)):
+                x_dir = X[inds[i]] - X[inds[i-1]]
+                x_dir /= (np.linalg.norm(x_dir) + 1e-8)
+                y_len = np.linalg.norm(Y[inds[i]] - Y[inds[i-1]])
+                current_point = current_point + x_dir * y_len
+                Y_visualization[inds[i]] = current_point
 
+    return total_distance#, Y_visualization

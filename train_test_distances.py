@@ -21,9 +21,9 @@ if __name__ == "__main__":
     # Add this lines for debugging
     args = {'data_path': '/home/vagsart/code/signum/signum/sample_signum/',
             'output_path': 'data/results',
-            'distance_name': 'quaternion_distance',
+            'distance_name': 'l2',
             # 'distance_args': {'scale': True, 'mean': True, 'Rotation': True, 's1': 0, 's2': 0, 's3': 0}}
-            'distance_args': {'lambda_factor': 1.0, 'weight_squared': False, 'scale': True}}
+            'distance_args': {}}
     args = argparse.Namespace(**args)
 
     
@@ -34,8 +34,8 @@ if __name__ == "__main__":
 
 
 
-    X_train = np.load(osp.join(args.data_path, 'X_train.npy'))#[0:10]
-    X_test = np.load(osp.join(args.data_path, 'X_test.npy'))#[0:10]
+    X_train = np.load(osp.join(args.data_path, 'X_train.npy'))[0:10]
+    X_test = np.load(osp.join(args.data_path, 'X_test.npy'))[0:10]
     
     n_landmarks = 21
     dim = 3

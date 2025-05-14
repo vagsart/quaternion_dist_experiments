@@ -19,7 +19,7 @@ def rotation_matrix_to_quaternion(R):
     return q  # x, y, z, w
 
 # Quaternion distance between two hand pose frames
-def quaternion_distance_torch(X, Y, args):
+def quaternion_distance_torch(X, Y, args={}):
     Y_translated = Y + (X[0] - Y[0])
 
     finger_indices = {
