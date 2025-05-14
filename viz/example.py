@@ -7,7 +7,7 @@ from src.distances import quaternion_distance
 # import torch
 
 # Paths and data loading
-data_path = '/home/vagsart/code/signum/signum/sample_signum/'
+data_path = './data/'
 X_train = np.load(osp.join(data_path, 'X_train.npy'))
 X_test = np.load(osp.join(data_path, 'X_test.npy'))
 

@@ -83,5 +83,4 @@ secrets.yaml
 *.db
 
 # Ignore data folders
-data/
 datasets/
