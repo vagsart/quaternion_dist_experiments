@@ -60,46 +60,6 @@ def procrustes_alignment(X, Y, args={'scale': True, 'rotation': True, 'mean': Tr
 
 
 
-def rotation_matrix_to_quaternion(R):
-    q = np.zeros((R.shape[0], 4))
-    trace = np.einsum('...ii', R)
-
-    cond1 = trace > 0
-    S = np.sqrt(trace[cond1] + 1.0) * 2
-    q[cond1, 3] = 0.25 * S
-    q[cond1, 0] = (R[cond1, 2, 1] - R[cond1, 1, 2]) / S
-    q[cond1, 1] = (R[cond1, 0, 2] - R[cond1, 2, 0]) / S
-    q[cond1, 2] = (R[cond1, 1, 0] - R[cond1, 0, 1]) / S
-
-    cond2 = ~cond1
-    R_ = R[cond2]
-    q_ = np.zeros((R_.shape[0], 4))
-
-    for i in range(R_.shape[0]):
-        m = R_[i]
-        if m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
-            S = np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2
-            q_[i, 3] = (m[2, 1] - m[1, 2]) / S
-            q_[i, 0] = 0.25 * S
-            q_[i, 1] = (m[0, 1] + m[1, 0]) / S
-            q_[i, 2] = (m[0, 2] + m[2, 0]) / S
-        elif m[1, 1] > m[2, 2]:
-            S = np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2
-            q_[i, 3] = (m[0, 2] - m[2, 0]) / S
-            q_[i, 0] = (m[0, 1] + m[1, 0]) / S
-            q_[i, 1] = 0.25 * S
-            q_[i, 2] = (m[1, 2] + m[2, 1]) / S
-        else:
-            S = np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2
-            q_[i, 3] = (m[1, 0] - m[0, 1]) / S
-            q_[i, 0] = (m[0, 2] + m[2, 0]) / S
-            q_[i, 1] = (m[1, 2] + m[2, 1]) / S
-            q_[i, 2] = 0.25 * S
-
-    q[cond2] = q_
-    return q
-
-
 def quaternion_distance(X, Y, args):
     base_translation = X[0] - Y[0]
     Y_translated = Y + base_translation
@@ -123,8 +83,8 @@ def quaternion_distance(X, Y, args):
         diff_X = np.diff(chain_X, axis=0)
         diff_Y = np.diff(chain_Y, axis=0)
 
-        norm_X = np.linalg.norm(diff_X, axis=1, keepdims=True)
-        norm_Y = np.linalg.norm(diff_Y, axis=1, keepdims=True)
+        norm_X = R.from_matrix(frames_X).as_quat()
+        norm_Y = R.from_matrix(frames_Y).as_quat()
 
         dirs_X = diff_X / (norm_X + 1e-8)
         dirs_Y = diff_Y / (norm_Y + 1e-8)
